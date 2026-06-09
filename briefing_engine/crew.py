@@ -37,14 +37,14 @@ from .tools import FetchTeamStatsTool
 lead_scout = Agent(
     role="Lead Scout",
     goal=(
-        "Retrieve complete, accurate match stats for BOTH teams in the fixture "
-        "by calling the fetch_team_stats tool once per team, and surface any "
-        "injury or suspension alerts you find."
+        """Retrieve complete, accurate match stats for BOTH teams in the fixture
+        by calling the fetch_team_stats tool once per team, and surface any 
+        injury or suspension alerts you find."""
     ),
     backstory=(
-        "You are a meticulous data scout for a national team. You never guess "
-        "numbers — you ALWAYS fetch them with your tool. If the tool returns an "
-        "error, you report it plainly rather than inventing data."
+        """You are a meticulous data scout for a national team. You never guess 
+        numbers — you ALWAYS fetch them with your tool. If the tool returns an 
+        error, you report it plainly rather than inventing data."""
     ),
     tools=[FetchTeamStatsTool()],   # <-- the agent's ONLY way to get real data
     verbose=True,                   # prints the agent's reasoning — great for learning
@@ -71,7 +71,7 @@ scout_task = Task(
 
 # ---------------------------------------------------------------------------
 # AGENT 2 — THE TACTICAL ANALYST   >>> TODO #3 (your turn)
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------/
 # This agent has NO tools. Its raw material is the Scout's output, not the API.
 # That's the key lesson: an agent's "input" can be another agent's "output".
 #
@@ -81,6 +81,16 @@ scout_task = Task(
 #             and CARRY FORWARD any critical alerts the Scout found.
 #     - backstory: a sharp analyst who reasons only from the data given.
 #     - tools=[]  (none — it thinks, it doesn't fetch)
+tactical_analyst = Agent(
+    role="Tactical Analyst",
+    goal=("""
+    """),
+    backstory=("""
+    """),
+    tools=[],
+    verbose=True,
+    allow_delegation=False,
+)
 #
 # >>> TODO #3b: Define `analysis_task = Task(...)` and — THE IMPORTANT PART —
 #     pass `context=[scout_task]`. THIS is what hands the Scout's JSON to the

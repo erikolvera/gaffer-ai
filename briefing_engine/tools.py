@@ -64,6 +64,26 @@ _FAKE_DB: dict[str, dict] = {
     #     two key_players, and — importantly — ONE alert with severity "critical"
     #     (e.g. a suspended center-back). This is how you'll test that critical
     #     alerts survive the journey through all three agents.
+    "Germany": {
+        "team_id" : 2,
+        "team_name" : "Germany",
+        "formation" : "4-2-3-1",
+        "recent_form" : [
+            {"opponent": "USA", "result": "W", "score": "2-1",
+             "expected_goals_for" : 2.2, "expected_goals_against" : 0.8},
+            {"opponent": "Finland", "result": "W", "score": "4-0",
+             "expected_goals_for" : 4.5, "expected_goals_against" : 0.6}
+        ],
+        "key_players" : [
+            {"name": "K. Havertz", "position": "ST", "goals": 1,
+             "assists": 1, "minutes_played" : 270, "is_available" : True},
+            {"name": "J. Kimmich", "position": "RB", "goals": 0,
+             "assists" : 2, "minutes_played" : 270, "is_available" : True}
+        ],
+        "alerts" : [
+            {"severity": "critical", "message": "Undav is injured", "affected_player": "Undav"}
+        ]
+    }
 }
 
 
@@ -121,8 +141,8 @@ class FetchTeamStatsTool(BaseTool):
             return f"ERROR: {e}"
 
         except Exception as e:
-            # >>> TODO #2: Pydantic validation failures land here.
-            #     Log the error AND return a string starting with "ERROR:" so the
-            #     agent can decide what to do. Think about: should the agent retry?
-            #     Should it abort? (Hint: return a clear message; don't crash.)
-            raise NotImplementedError("Handle validation errors here — see TODO #2")
+            # Pydantic validation failed: the mock/API returned data that
+            # violates our TeamMatchData contract. Don't crash the crew — log it
+            # and hand the agent a readable error it can reason about.
+            logger.error("Validation failed for '%s': %s", team_name, e)
+            return f"ERROR: Invalid data for '{team_name}' - {e}"
