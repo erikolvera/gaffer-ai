@@ -35,7 +35,7 @@ from .schemas import (
 )
 
 # Same env-configurable model as crew.py (free-tier quotas are per model).
-_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 
 # A real logger, not print(). In production you'd ship these to Datadog/CloudWatch.
 logger = logging.getLogger("briefing_engine.tools")

@@ -34,9 +34,9 @@ from .schemas import BriefingOutput
 
 # One shared LLM for all three agents. The "gemini/" prefix selects Google's
 # API via CrewAI's native Gemini client (free tier; needs GEMINI_API_KEY).
-# Default is flash-lite: free-tier quotas are PER MODEL, and flash-lite's daily
-# budget (~1,000 req) dwarfs flash's (20). Override with GEMINI_MODEL.
-llm = LLM(model="gemini/" + os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite"))
+# Free-tier quotas are PER MODEL: 2.5-flash allows only 20 req/day, while the
+# 3.x generation is far roomier. Override with GEMINI_MODEL if needed.
+llm = LLM(model="gemini/" + os.getenv("GEMINI_MODEL", "gemini-3.5-flash"))
 
 
 # ---------------------------------------------------------------------------

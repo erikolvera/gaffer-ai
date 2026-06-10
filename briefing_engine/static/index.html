@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Briefing Engine — World Cup 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Spectral:ital,wght@0,300;0,400;0,600;1,400&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+<style>
+  :root {
+    --pitch: #0b1d13;
+    --pitch-deep: #071009;
+    --chalk: #f2efe2;
+    --chalk-dim: rgba(242, 239, 226, 0.55);
+    --line: rgba(242, 239, 226, 0.08);
+    --volt: #d8ff3e;
+    --critical: #ff5240;
+    --warning: #ffb347;
+    --gold: #e8b54a;
+    --mono: "JetBrains Mono", monospace;
+    --display: "Bebas Neue", sans-serif;
+    --serif: "Spectral", serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background:
+      radial-gradient(ellipse 120% 60% at 50% -10%, rgba(216,255,62,0.07), transparent 60%),
+      radial-gradient(ellipse 80% 50% at 80% 110%, rgba(216,255,62,0.04), transparent 60%),
+      linear-gradient(var(--pitch), var(--pitch-deep));
+    color: var(--chalk);
+    font-family: var(--serif);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ------- chalk pitch markings ------- */
+  .pitch-lines {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  }
+  .pitch-lines .halfway {
+    position: absolute; top: 50%; left: 0; right: 0;
+    border-top: 2px solid var(--line);
+  }
+  .pitch-lines .center-circle {
+    position: absolute; top: 50%; left: 50%;
+    width: 46vmin; height: 46vmin;
+    transform: translate(-50%, -50%);
+    border: 2px solid var(--line); border-radius: 50%;
+  }
+  .pitch-lines .center-dot {
+    position: absolute; top: 50%; left: 50%;
+    width: 8px; height: 8px; transform: translate(-50%, -50%);
+    background: var(--line); border-radius: 50%;
+  }
+  .pitch-lines .box-top, .pitch-lines .box-bottom {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    width: 56vmin; height: 18vmin;
+    border: 2px solid var(--line);
+  }
+  .pitch-lines .box-top { top: -2px; border-top: none; }
+  .pitch-lines .box-bottom { bottom: -2px; border-bottom: none; }
+
+  /* grain overlay */
+  body::after {
+    content: ""; position: fixed; inset: 0; z-index: 1; pointer-events: none;
+    opacity: 0.05; mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .wrap { position: relative; z-index: 2; max-width: 920px; margin: 0 auto; padding: 0 24px 96px; }
+
+  /* ------- status bar ------- */
+  .statusbar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 18px 0; font-family: var(--mono); font-size: 11px;
+    letter-spacing: 0.14em; color: var(--chalk-dim); text-transform: uppercase;
+    border-bottom: 1px solid var(--line);
+  }
+  .statusbar .dot { color: var(--volt); animation: blink 2.4s infinite; }
+  @keyframes blink { 0%,100% {opacity:1} 50% {opacity:0.25} }
+
+  /* ------- hero ------- */
+  header.hero { padding: 72px 0 14px; text-align: center; }
+  .hero .kicker {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.34em;
+    text-transform: uppercase; color: var(--volt);
+    animation: rise 0.7s ease both;
+  }
+  .hero h1 {
+    font-family: var(--display);
+    font-size: clamp(64px, 13vw, 148px);
+    line-height: 0.92; letter-spacing: 0.01em;
+    margin: 10px 0 6px;
+    animation: rise 0.7s 0.08s ease both;
+  }
+  .hero h1 .accent { color: var(--volt); }
+  .hero .sub {
+    font-style: italic; font-weight: 300; color: var(--chalk-dim);
+    font-size: clamp(15px, 2.2vw, 19px);
+    animation: rise 0.7s 0.16s ease both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+  /* ------- fixture form ------- */
+  form.fixture {
+    margin: 56px auto 0; max-width: 760px;
+    animation: rise 0.7s 0.24s ease both;
+  }
+  .teams {
+    display: grid; grid-template-columns: 1fr 84px 1fr;
+    align-items: end; gap: 8px;
+  }
+  .team-field label {
+    display: block; font-family: var(--mono); font-size: 10px;
+    letter-spacing: 0.22em; text-transform: uppercase; color: var(--chalk-dim);
+    margin-bottom: 10px;
+  }
+  .team-field input {
+    width: 100%; background: transparent; border: none;
+    border-bottom: 2px solid rgba(242,239,226,0.25);
+    color: var(--chalk); font-family: var(--display);
+    font-size: clamp(30px, 5.4vw, 52px); letter-spacing: 0.03em;
+    text-transform: uppercase; padding: 2px 4px 8px; outline: none;
+    transition: border-color 0.25s;
+    border-radius: 0;
+  }
+  .team-field input:focus { border-bottom-color: var(--volt); }
+  .team-field input::placeholder { color: rgba(242,239,226,0.18); }
+  .team-field.away { text-align: right; }
+  .team-field.away input { text-align: right; }
+
+  .vs {
+    width: 64px; height: 64px; margin: 0 auto; flex-shrink: 0;
+    border: 2px solid var(--volt); border-radius: 50%;
+    display: grid; place-items: center;
+    font-family: var(--display); font-size: 26px; color: var(--volt);
+    transform: rotate(-8deg);
+  }
+
+  .meta-row {
+    display: flex; gap: 24px; align-items: center; justify-content: center;
+    margin-top: 38px; flex-wrap: wrap;
+  }
+  .venue-field { display: flex; align-items: baseline; gap: 10px; }
+  .venue-field label {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.22em;
+    text-transform: uppercase; color: var(--chalk-dim);
+  }
+  .venue-field input {
+    background: transparent; border: none;
+    border-bottom: 1px solid rgba(242,239,226,0.25);
+    color: var(--chalk); font-family: var(--serif); font-style: italic;
+    font-size: 16px; padding: 2px 4px 4px; outline: none; min-width: 200px;
+    border-radius: 0;
+  }
+  .venue-field input:focus { border-bottom-color: var(--volt); }
+
+  button.go {
+    font-family: var(--display); font-size: 22px; letter-spacing: 0.08em;
+    background: var(--volt); color: var(--pitch-deep); border: none;
+    padding: 14px 42px 11px; cursor: pointer;
+    clip-path: polygon(6% 0, 100% 0, 94% 100%, 0 100%);
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  button.go:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(216,255,62,0.25); }
+  button.go:disabled { opacity: 0.4; cursor: wait; transform: none; box-shadow: none; }
+
+  /* ------- agent relay ------- */
+  section.relay { display: none; margin-top: 80px; }
+  section.relay.active { display: block; animation: rise 0.5s ease both; }
+  .relay h2, .report-head h2 {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.3em;
+    text-transform: uppercase; color: var(--chalk-dim); text-align: center;
+  }
+  .relay-track {
+    display: grid; grid-template-columns: 1fr 40px 1fr 40px 1fr;
+    align-items: center; gap: 6px; margin-top: 30px;
+  }
+  .agent {
+    border: 1px solid var(--line); padding: 20px 18px 16px;
+    background: rgba(7,16,9,0.55); text-align: center;
+    transition: border-color 0.4s, box-shadow 0.4s; position: relative;
+  }
+  .agent .num {
+    position: absolute; top: -11px; left: 14px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.18em;
+    background: var(--pitch-deep); padding: 2px 8px; color: var(--chalk-dim);
+    border: 1px solid var(--line);
+  }
+  .agent .role { font-family: var(--display); font-size: 26px; letter-spacing: 0.04em; }
+  .agent .duty { font-family: var(--mono); font-size: 10px; color: var(--chalk-dim); letter-spacing: 0.06em; margin-top: 4px; min-height: 26px; }
+  .agent .state { font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; margin-top: 12px; color: var(--chalk-dim); }
+  .agent.working { border-color: var(--volt); box-shadow: 0 0 28px rgba(216,255,62,0.12); }
+  .agent.working .state { color: var(--volt); }
+  .agent.working .state::after { content: "…"; animation: blink 1.1s infinite; }
+  .agent.done { border-color: rgba(216,255,62,0.4); }
+  .agent.done .state { color: var(--volt); }
+  .baton { text-align: center; color: var(--chalk-dim); font-family: var(--mono); }
+  .relay .note {
+    text-align: center; margin-top: 26px; font-style: italic;
+    color: var(--chalk-dim); font-size: 14px;
+  }
+  .relay .clock { font-family: var(--mono); font-style: normal; color: var(--volt); }
+
+  /* ------- report ------- */
+  section.report { display: none; margin-top: 84px; }
+  section.report.active { display: block; animation: rise 0.6s ease both; }
+  .report-head { margin-bottom: 26px; }
+  .report-badges { display: flex; gap: 10px; justify-content: center; margin-top: 14px; flex-wrap: wrap; }
+  .badge {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.18em;
+    text-transform: uppercase; padding: 5px 12px 4px;
+    border: 1px solid var(--line); color: var(--chalk-dim);
+  }
+  .badge.fresh { border-color: var(--volt); color: var(--volt); }
+  .badge.cached { border-color: var(--gold); color: var(--gold); }
+
+  .alert-stubs { display: grid; gap: 10px; margin: 26px 0; }
+  .stub {
+    display: flex; align-items: center; gap: 14px;
+    border: 1px dashed var(--critical); padding: 12px 16px;
+    background: rgba(255,82,64,0.06);
+  }
+  .stub .sev {
+    font-family: var(--display); font-size: 18px; color: var(--critical);
+    letter-spacing: 0.08em; white-space: nowrap;
+  }
+  .stub.warning { border-color: var(--warning); background: rgba(255,179,71,0.06); }
+  .stub.warning .sev { color: var(--warning); }
+  .stub.info { border-color: var(--chalk-dim); background: rgba(242,239,226,0.04); }
+  .stub.info .sev { color: var(--chalk-dim); }
+  .stub .msg { font-size: 14.5px; }
+  .stub .msg .player { font-family: var(--mono); font-size: 11px; color: var(--chalk-dim); display: block; margin-top: 2px; }
+
+  article.briefing {
+    background: var(--chalk); color: #1a221c;
+    padding: clamp(28px, 6vw, 64px);
+    box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+    position: relative;
+  }
+  article.briefing::before {
+    content: "WC·26"; position: absolute; top: 18px; right: 22px;
+    font-family: var(--display); font-size: 15px; color: rgba(26,34,28,0.3);
+    letter-spacing: 0.12em;
+  }
+  article.briefing h1, article.briefing h2 {
+    font-family: var(--display); letter-spacing: 0.02em; line-height: 1;
+    color: #11180f;
+  }
+  article.briefing h1 { font-size: clamp(38px, 7vw, 64px); margin-bottom: 18px; }
+  article.briefing h2 {
+    font-size: clamp(24px, 4vw, 34px); margin: 34px 0 12px;
+    padding-top: 18px; border-top: 2px solid #11180f;
+  }
+  article.briefing p { font-size: 16.5px; line-height: 1.65; margin: 12px 0; }
+  article.briefing li { font-size: 16px; line-height: 1.6; margin: 8px 0 8px 20px; }
+  article.briefing strong { font-weight: 600; }
+  article.briefing em { font-style: italic; }
+
+  /* ------- error ------- */
+  .error-box {
+    display: none; margin: 60px auto 0; max-width: 640px;
+    border: 1px solid var(--critical); padding: 22px 26px;
+    font-family: var(--mono); font-size: 13px; line-height: 1.7;
+    color: var(--critical); background: rgba(255,82,64,0.05);
+  }
+  .error-box.active { display: block; animation: rise 0.4s ease both; }
+
+  footer {
+    margin-top: 110px; padding-top: 22px; border-top: 1px solid var(--line);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em;
+    color: var(--chalk-dim); text-transform: uppercase;
+  }
+  footer a { color: var(--volt); text-decoration: none; }
+
+  @media (max-width: 640px) {
+    .teams { grid-template-columns: 1fr; }
+    .vs { margin: 6px auto; }
+    .team-field.away, .team-field.away input { text-align: left; }
+    .relay-track { grid-template-columns: 1fr; }
+    .baton { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+
+<div class="pitch-lines" aria-hidden="true">
+  <div class="box-top"></div>
+  <div class="halfway"></div>
+  <div class="center-circle"></div>
+  <div class="center-dot"></div>
+  <div class="box-bottom"></div>
+</div>
+
+<div class="wrap">
+
+  <div class="statusbar">
+    <span><span class="dot">●</span> ENGINE LIVE</span>
+    <span>3 AGENTS · GROUNDED SEARCH · VALIDATED OUTPUT</span>
+  </div>
+
+  <header class="hero">
+    <div class="kicker">FIFA World Cup 2026</div>
+    <h1>THE BRIEFING<br><span class="accent">ENGINE</span></h1>
+    <p class="sub">Pick any fixture. Three AI agents scout it, break it down, and write your matchday preview.</p>
+  </header>
+
+  <form class="fixture" id="fixtureForm" autocomplete="off">
+    <div class="teams">
+      <div class="team-field home">
+        <label for="home">Home Team</label>
+        <input id="home" name="home" placeholder="MEXICO" required maxlength="40">
+      </div>
+      <div class="vs">VS</div>
+      <div class="team-field away">
+        <label for="away">Away Team</label>
+        <input id="away" name="away" placeholder="SOUTH AFRICA" required maxlength="40">
+      </div>
+    </div>
+    <div class="meta-row">
+      <div class="venue-field">
+        <label for="venue">Venue</label>
+        <input id="venue" name="venue" placeholder="Estadio Azteca (optional)" maxlength="60">
+      </div>
+      <button class="go" type="submit" id="goBtn">RUN THE BRIEFING</button>
+    </div>
+  </form>
+
+  <section class="relay" id="relay">
+    <h2>Agents at work</h2>
+    <div class="relay-track">
+      <div class="agent" id="agent-0">
+        <span class="num">AGENT 01</span>
+        <div class="role">SCOUT</div>
+        <div class="duty">searches the live web for stats, form &amp; team news</div>
+        <div class="state" data-idle="WAITING" data-work="FETCHING" data-done="✓ DELIVERED">WAITING</div>
+      </div>
+      <div class="baton">→</div>
+      <div class="agent" id="agent-1">
+        <span class="num">AGENT 02</span>
+        <div class="role">ANALYST</div>
+        <div class="duty">reads formations, xG trends &amp; dangerous matchups</div>
+        <div class="state" data-idle="WAITING" data-work="ANALYZING" data-done="✓ DELIVERED">WAITING</div>
+      </div>
+      <div class="baton">→</div>
+      <div class="agent" id="agent-2">
+        <span class="num">AGENT 03</span>
+        <div class="role">JOURNALIST</div>
+        <div class="duty">writes the fan-first matchday preview</div>
+        <div class="state" data-idle="WAITING" data-work="WRITING" data-done="✓ DELIVERED">WAITING</div>
+      </div>
+    </div>
+    <p class="note">A fresh briefing takes about two minutes — real research is happening. <span class="clock" id="clock">0:00</span></p>
+  </section>
+
+  <div class="error-box" id="errorBox"></div>
+
+  <section class="report" id="report">
+    <div class="report-head">
+      <h2>Matchday Briefing</h2>
+      <div class="report-badges" id="badges"></div>
+    </div>
+    <div class="alert-stubs" id="alertStubs"></div>
+    <article class="briefing" id="briefingBody"></article>
+  </section>
+
+  <footer>
+    <span>Built by Erik Olvera</span>
+    <span>CrewAI · Gemini · Pydantic — <a href="https://github.com/erikolvera" target="_blank" rel="noopener">source</a></span>
+  </footer>
+
+</div>
+
+<script>
+  const form = document.getElementById("fixtureForm");
+  const goBtn = document.getElementById("goBtn");
+  const relay = document.getElementById("relay");
+  const report = document.getElementById("report");
+  const errorBox = document.getElementById("errorBox");
+  const clock = document.getElementById("clock");
+  const agents = [0, 1, 2].map(i => document.getElementById("agent-" + i));
+
+  let timers = [];
+
+  function setAgent(i, state) {
+    const el = agents[i];
+    el.classList.remove("working", "done");
+    if (state !== "idle") el.classList.add(state === "work" ? "working" : "done");
+    const s = el.querySelector(".state");
+    s.textContent = s.dataset[state === "work" ? "work" : state === "done" ? "done" : "idle"];
+  }
+
+  function startRelay() {
+    relay.classList.add("active");
+    report.classList.remove("active");
+    errorBox.classList.remove("active");
+    agents.forEach((_, i) => setAgent(i, "idle"));
+    setAgent(0, "work");
+    // The API doesn't stream agent progress (yet), so the relay paces itself
+    // on typical timings; the response, whenever it lands, completes the track.
+    timers.push(setTimeout(() => { setAgent(0, "done"); setAgent(1, "work"); }, 45000));
+    timers.push(setTimeout(() => { setAgent(1, "done"); setAgent(2, "work"); }, 90000));
+    const t0 = Date.now();
+    timers.push(setInterval(() => {
+      const s = Math.floor((Date.now() - t0) / 1000);
+      clock.textContent = Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+    }, 1000));
+  }
+
+  function stopRelay(success) {
+    timers.forEach(t => { clearTimeout(t); clearInterval(t); });
+    timers = [];
+    if (success) agents.forEach((_, i) => setAgent(i, "done"));
+    setTimeout(() => relay.classList.remove("active"), success ? 700 : 0);
+  }
+
+  function renderAlerts(alerts) {
+    const wrap = document.getElementById("alertStubs");
+    wrap.innerHTML = "";
+    for (const a of alerts) {
+      const div = document.createElement("div");
+      div.className = "stub " + (a.severity === "critical" ? "" : a.severity);
+      const sev = document.createElement("span");
+      sev.className = "sev";
+      sev.textContent = a.severity.toUpperCase();
+      const msg = document.createElement("span");
+      msg.className = "msg";
+      msg.textContent = a.message;
+      if (a.affected_player) {
+        const p = document.createElement("span");
+        p.className = "player";
+        p.textContent = "PLAYER: " + a.affected_player.toUpperCase();
+        msg.appendChild(p);
+      }
+      div.append(sev, msg);
+      wrap.appendChild(div);
+    }
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const home = document.getElementById("home").value.trim();
+    const away = document.getElementById("away").value.trim();
+    const venue = document.getElementById("venue").value.trim() || "TBD";
+    if (!home || !away) return;
+
+    goBtn.disabled = true;
+    startRelay();
+
+    try {
+      const res = await fetch("/api/briefing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ home_team: home, away_team: away, venue }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || ("HTTP " + res.status));
+
+      stopRelay(true);
+      const b = data.briefing;
+      document.getElementById("badges").innerHTML =
+        '<span class="badge">' + b.fixture.replace(/</g, "&lt;") + "</span>" +
+        (data.cached
+          ? '<span class="badge cached">CACHED — TODAY\'S EDITION</span>'
+          : '<span class="badge fresh">FRESHLY GENERATED</span>');
+      renderAlerts(b.escalated_alerts || []);
+      document.getElementById("briefingBody").innerHTML =
+        window.marked ? marked.parse(b.markdown_briefing)
+                      : "<pre>" + b.markdown_briefing.replace(/</g, "&lt;") + "</pre>";
+      report.classList.add("active");
+      report.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (err) {
+      stopRelay(false);
+      errorBox.textContent = "BRIEFING FAILED — " + err.message;
+      errorBox.classList.add("active");
+    } finally {
+      goBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
