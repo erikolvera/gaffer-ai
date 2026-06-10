@@ -1,0 +1,13 @@
+# Keep secrets and local cruft out of the image. .env especially:
+# the key goes in via platform env vars, never baked into a layer.
+.env
+.venv
+__pycache__
+*.pyc
+.git
+.gitignore
+.claude
+.vscode
+.DS_Store
+README.md
+render.yaml

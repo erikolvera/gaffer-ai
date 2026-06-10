@@ -1,77 +1,119 @@
-# World Cup Tactical Briefing Engine ⚽
+# ⚽ Gaffer AI — The World Cup 2026 Briefing Engine
 
-A **learning project** for multi-agent AI engineering with [CrewAI](https://docs.crewai.com).
-Three specialized agents cooperate to turn a match fixture into a manager's tactical briefing.
+Type any two national teams. Three AI agents scout the live web, break the
+matchup down, and write you a fan-first matchday briefing — with real injury
+news from this week, validated end-to-end by typed data contracts.
 
-> This repo is a **scaffold with deliberate gaps** (`>>> TODO #N`). The fundamentals are
-> demonstrated in fully-written reference code; you complete the agent logic to learn by doing.
+> **Live demo:** _coming soon — deploys via [render.yaml](render.yaml)_
+> **Example:** "Mexico vs South Africa" → a preview leading with Mexico's actual
+> June 2026 injury crisis, generated in ~45 seconds.
 
 ---
 
-## The 8 terms to know
-
-| Term | What it means | Where it lives here |
-|------|---------------|---------------------|
-| **Agent** | An LLM + role/goal/backstory + tools, running a reason→act loop | `crew.py` |
-| **Tool** | A Python function the agent is *allowed* to call | `tools.py` → `FetchTeamStatsTool` |
-| **Task** | A unit of work for an agent (`description` + `expected_output`) | `crew.py` |
-| **Crew** | The orchestrator running tasks in order | `crew.py` → `build_crew()` |
-| **Context passing** | One task's output becomes the next task's input (`context=[...]`) | `crew.py` TODO #3b |
-| **Backstory** | Persona text that becomes the agent's system prompt | each `Agent(...)` |
-| **Structured output** | Forcing data into a typed schema instead of free text | `schemas.py` |
-| **Orchestration** | The control flow connecting it all — *your code*, not the LLM | `crew.py` |
-
-## Data flow
+## How it works
 
 ```
-USER REQUEST ──▶ build_crew() (sequential)
-                     │
-   Lead Scout ──JSON──▶ Tactical Analyst ──analysis──▶ Sports Journalist ──▶ Markdown
-       │                                                                      briefing
-       └─ calls tools.py ──requests──▶ api-football-v1 (mocked)
-                  │
-                  └─ validates with schemas.py  ← the contract every layer trusts
+        Browser search ──▶ POST /api/briefing ──▶ daily cache? ──▶ instant hit
+                                   │ miss
+                                   ▼
+        ┌──────────────────────────────────────────────┐
+        │       crew.py — sequential agent relay       │
+        └──────────────────────────────────────────────┘
+             │                  │                  │
+             ▼                  ▼                  ▼
+        ┌─────────┐  ctx  ┌──────────┐  ctx  ┌────────────┐
+        │  SCOUT  │ ────▶ │ ANALYST  │ ────▶ │ JOURNALIST │
+        │ fetches │       │ reads xG,│       │ writes the │
+        │ live    │       │ shapes,  │       │ fan-first  │
+        │ stats   │       │ matchups │       │ preview    │
+        └─────────┘       └──────────┘       └────────────┘
+             │                                     │
+             ▼                                     ▼
+        grounded Google                   BriefingOutput schema
+        Search (Gemini)                   (hard validation, not
+        → TeamMatchData                    "looks right" prompting)
 ```
 
-## Directory map
+Every hop is guarded by a Pydantic contract (`schemas.py`): the user's request
+(`FixtureRequest`), the tool's payload (`TeamMatchData`), and the final answer
+(`BriefingOutput`). The system's acceptance test is the **critical-alert
+journey**: an injury flagged by the Scout must arrive in the final response as
+a typed `escalated_alerts` object — surviving three LLM handoffs without
+decaying into vibes.
 
-```
-world_cup_2026/
-├── briefing_engine/
-│   ├── schemas.py   ✅ reference — fully written (study this for "good")
-│   ├── tools.py     🔨 scaffold — TODO #1, #2
-│   ├── crew.py      🔨 scaffold — TODO #3, #4, #5
-│   └── main.py      🔨 scaffold — TODO #6, #7
-├── requirements.txt
-└── README.md
-```
+## The stack
 
-## How to run
+- **CrewAI** — agent orchestration (sequential process, context passing)
+- **Gemini 3.5 Flash** (free tier) — agent reasoning + grounded Google Search
+  for live team news
+- **Pydantic v2** — data contracts at every boundary
+- **FastAPI + vanilla JS** — one endpoint, one page; the UI animates the agent
+  relay while the crew works
+
+## Engineering notes (the parts that fought back)
+
+- **Free-tier quotas are per model, and the docs lie.** Research said 250
+  requests/day for `gemini-2.5-flash`; the API's 429 said `limit: 20`. The fix:
+  model selection is env-configurable (`GEMINI_MODEL`), defaulting to the 3.x
+  generation with its own, roomier bucket.
+- **Cheaper models fail quietly.** On `flash-lite`, the crew ran fine — and
+  silently dropped the critical alert from the structured output. The
+  alert-journey test caught it. Model choice is a correctness decision, not
+  just a cost one.
+- **Grounding + strict JSON don't mix in one call.** Live data is fetched in
+  two steps: a grounded call researches in prose, a second call structures it
+  against the schema. Both paths (live and mock fallback) pass identical
+  validation — web data earns no extra trust.
+- **One briefing ≈ 15–20 LLM calls**, so the API caches per fixture per day
+  (order-insensitive) and serializes generation behind a lock with a
+  double-check. The first visitor pays ~45s; everyone else gets today's
+  edition instantly, at zero quota.
+
+## Run it locally
 
 ```bash
+git clone https://github.com/erikolvera/gaffer-ai.git && cd gaffer-ai
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# Imports & validates with NO key (proves the structure is sound):
-python -c "from briefing_engine import schemas, tools, crew, main; print('ok')"
+# Free key from https://aistudio.google.com — no card needed
+echo "GEMINI_API_KEY=your-key" > .env
 
-# Run live (after you finish the TODOs + set a key):
-export OPENAI_API_KEY='sk-...'
-python -m briefing_engine.main
+# CLI:
+python -m briefing_engine.main Mexico "South Africa" --venue "Estadio Azteca"
+
+# Or the web app:
+uvicorn briefing_engine.api:app --reload     # → http://localhost:8000
 ```
 
-## Your learning checklist
+Offline / zero-quota mode: `BRIEFING_DATA_MODE=mock` uses canned USA/Germany
+data (the original learning scaffold this project grew from).
 
-Work them in order — each builds on the last:
+## Deploy
 
-- [ ] **TODO #1** (`tools.py`) — add a `Germany` entry to `_FAKE_DB` with a **critical** alert
-- [ ] **TODO #2** (`tools.py`) — handle Pydantic validation errors gracefully (no crash)
-- [ ] **TODO #3** (`crew.py`) — write the **Tactical Analyst** agent + task; wire `context=[scout_task]`
-- [ ] **TODO #4** (`crew.py`) — write the **Sports Journalist** agent + task; try `output_pydantic=BriefingOutput`
-- [ ] **TODO #5** (`crew.py`) — register both new agents/tasks in `build_crew()`
-- [ ] **TODO #6** (`main.py`) — call `crew.kickoff(inputs=...)`
-- [ ] **TODO #7** (`main.py`) — inspect the result (`result.raw` vs `result.pydantic`)
+**Render (free):** push to GitHub → Render → *New + → Blueprint* → pick this
+repo → set `GEMINI_API_KEY` in the dashboard. `render.yaml` does the rest.
+A `Dockerfile` is included for Railway / Fly.io / Cloud Run.
 
-**Goal to prove you understand it:** trace the *critical alert* from the Germany mock data all
-the way to `BriefingOutput.escalated_alerts`. If it survives every hop, you've understood
-context passing — the core of multi-agent systems.
+## Project structure
+
+```
+briefing_engine/
+├── schemas.py   data contracts: FixtureRequest, TeamMatchData, BriefingOutput
+├── tools.py     Scout's hands: grounded live search + mock fallback ladder
+├── crew.py      the three agents, their tasks, and the relay wiring
+├── main.py      CLI entry point
+├── api.py       FastAPI: /api/briefing with cache + generation lock
+└── static/      the fan-facing search page
+```
+
+## Roadmap
+
+- Stream real agent progress to the relay UI (it currently paces on typical timings)
+- Persistent cache (SQLite) so briefings survive restarts
+- Fixture calendar integration — one click on today's real matches
+
+---
+
+Built by **Erik Olvera** as a deep dive into multi-agent orchestration:
+the LLM is a component — the architecture is the engineering.
