@@ -15,10 +15,14 @@ LEARNING GOAL FOR YOU:
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 from typing import Type
 
 from crewai.tools import BaseTool
+from google import genai
+from google.genai import types as genai_types
 from pydantic import BaseModel, Field
 
 from .schemas import (
@@ -29,6 +33,9 @@ from .schemas import (
     TeamMatchData,
     MatchResult,
 )
+
+# Same env-configurable model as crew.py (free-tier quotas are per model).
+_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
 
 # A real logger, not print(). In production you'd ship these to Datadog/CloudWatch.
 logger = logging.getLogger("briefing_engine.tools")
@@ -102,6 +109,56 @@ def _call_api(team_name: str) -> dict:
     return record
 
 
+def _search_live_stats(team_name: str) -> dict:
+    """
+    Fetch CURRENT stats for any team via Gemini's Grounding with Google Search.
+
+    Two-step pattern (grounding and strict JSON output don't mix in one call):
+      1. RESEARCH — a grounded call searches the live web and returns prose notes.
+      2. STRUCTURE — a second call converts those notes into JSON matching
+         TeamMatchData (enforced by response_schema).
+
+    The caller still validates the result against TeamMatchData, same as the
+    mock path — live data gets no special trust.
+    """
+    client = genai.Client()  # reads GEMINI_API_KEY from the environment
+
+    logger.info("Grounded search for %s (live)", team_name)
+    research = client.models.generate_content(
+        model=_GEMINI_MODEL,
+        contents=(
+            f"Research the {team_name} national football team for the 2026 FIFA "
+            "World Cup, as of today. Find: their current typical formation; their "
+            "last 2-3 competitive match results (opponent, result, score, and "
+            "expected goals for/against if reported — estimate sensibly if not); "
+            "2-3 key players with position, recent goals, assists, and minutes "
+            "played; and any CURRENT injuries or suspensions affecting the squad."
+        ),
+        config=genai_types.GenerateContentConfig(
+            tools=[genai_types.Tool(google_search=genai_types.GoogleSearch())],
+        ),
+    )
+
+    structured = client.models.generate_content(
+        model=_GEMINI_MODEL,
+        contents=(
+            "Convert these research notes into JSON for the team "
+            f"'{team_name}'. Use any positive integer for team_id. Formation "
+            "must look like '4-3-3'. For alerts, set affected_player to the "
+            "player's name and grade severity honestly: 'critical' ONLY for "
+            "players ruled out or in serious doubt for the tournament, "
+            "'warning' for knocks and minor doubts, 'info' for the rest. "
+            "Include at most the 4 most relevant alerts.\n\nNOTES:\n"
+            + (research.text or "")
+        ),
+        config=genai_types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=TeamMatchData,
+        ),
+    )
+    return json.loads(structured.text or "{}")
+
+
 # ---------------------------------------------------------------------------
 # The CrewAI tool itself.
 # ---------------------------------------------------------------------------
@@ -127,7 +184,19 @@ class FetchTeamStatsTool(BaseTool):
         serialize — so the agent only ever sees clean, contract-conformant data.
         """
         try:
-            raw = _call_api(team_name)
+            # Live grounded search by default; BRIEFING_DATA_MODE=mock forces the
+            # canned _FAKE_DB (offline dev / tests / zero-quota demos).
+            if os.getenv("BRIEFING_DATA_MODE", "live") == "mock":
+                raw = _call_api(team_name)
+            else:
+                try:
+                    raw = _search_live_stats(team_name)
+                except Exception as live_err:
+                    # Live path down (no key, quota, 503...) — mock keeps the
+                    # crew alive for teams we have canned data for.
+                    logger.warning("Live lookup for '%s' failed (%s); "
+                                   "falling back to mock", team_name, live_err)
+                    raw = _call_api(team_name)
             # The critical line: validate the raw payload against our contract.
             # If the API/mock returned junk, THIS is where we find out — loudly.
             validated = TeamMatchData(**raw)

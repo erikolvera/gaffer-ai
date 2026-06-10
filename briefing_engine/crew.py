@@ -25,6 +25,8 @@ HOW THIS FILE CAME TOGETHER:
 
 from __future__ import annotations
 
+import os
+
 from crewai import Agent, Crew, LLM, Task, Process
 
 from .tools import FetchTeamStatsTool
@@ -32,7 +34,9 @@ from .schemas import BriefingOutput
 
 # One shared LLM for all three agents. The "gemini/" prefix selects Google's
 # API via CrewAI's native Gemini client (free tier; needs GEMINI_API_KEY).
-llm = LLM(model="gemini/gemini-2.5-flash")
+# Default is flash-lite: free-tier quotas are PER MODEL, and flash-lite's daily
+# budget (~1,000 req) dwarfs flash's (20). Override with GEMINI_MODEL.
+llm = LLM(model="gemini/" + os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite"))
 
 
 # ---------------------------------------------------------------------------

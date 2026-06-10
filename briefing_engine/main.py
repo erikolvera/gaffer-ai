@@ -1,8 +1,13 @@
 """
-main.py — The entry point. Run with:  python -m briefing_engine.main
+main.py — The entry point.
+
+Run with:
+    python -m briefing_engine.main                          # defaults: USA vs Germany
+    python -m briefing_engine.main Mexico "South Africa" --venue "Estadio Azteca"
 
 THE FLOW:
-    1. Validate the user's request against a schema (FixtureRequest).
+    1. Parse the user's fixture from the CLI, validate it against a schema
+       (FixtureRequest).
     2. Build the crew (the three-agent pipeline).
     3. kickoff() — hand the validated fixture into the crew as templated inputs.
     4. Inspect the result.
@@ -14,6 +19,7 @@ WHY VALIDATE FIRST?
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 
@@ -30,11 +36,24 @@ from .schemas import BriefingOutput, FixtureRequest
 
 
 def main() -> None:
-    # --- Step 1: validate the user's request. If this raises, we never call an LLM.
+    # --- Step 1: parse and validate the user's request.
+    #     If validation raises, we never call an LLM.
+    parser = argparse.ArgumentParser(
+        prog="python -m briefing_engine.main",
+        description="Generate a fan-first match briefing for a World Cup fixture.",
+    )
+    parser.add_argument("home_team", nargs="?", default="USA",
+                        help="Home team name (default: USA)")
+    parser.add_argument("away_team", nargs="?", default="Germany",
+                        help="Away team name (default: Germany)")
+    parser.add_argument("--venue", default="TBD",
+                        help="Stadium name (default: TBD)")
+    args = parser.parse_args()
+
     fixture = FixtureRequest(
-        home_team="USA",
-        away_team="Germany",
-        venue="MetLife Stadium",
+        home_team=args.home_team,
+        away_team=args.away_team,
+        venue=args.venue,
     )
     print(f"📋 Briefing requested: {fixture.home_team} vs {fixture.away_team} "
           f"@ {fixture.venue}\n")
