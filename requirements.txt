@@ -1,7 +1,7 @@
 # Install with:  pip install -r requirements.txt
 #
 # NOTE: You can IMPORT and validate this project with just these packages.
-# You only need an LLM API key (OPENAI_API_KEY) to actually RUN the agents.
+# You only need an LLM API key (GEMINI_API_KEY) to actually RUN the agents.
 
-crewai>=0.80          # Agents, Tasks, Crews, BaseTool
+crewai[google-genai]>=0.80   # Agents, Tasks, Crews, BaseTool + native Gemini client
 pydantic>=2.0         # Data contracts (CrewAI depends on this too; pinned for clarity)

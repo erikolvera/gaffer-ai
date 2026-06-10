@@ -17,8 +17,16 @@ from __future__ import annotations
 import os
 import sys
 
+from dotenv import load_dotenv
+
+# Pull GEMINI_API_KEY (and any other secrets) from .env into the environment
+# BEFORE anything checks for it. .env is gitignored — secrets never get committed.
+load_dotenv()
+
+from crewai.crew import CrewOutput
+
 from .crew import build_crew
-from .schemas import FixtureRequest
+from .schemas import BriefingOutput, FixtureRequest
 
 
 def main() -> None:
@@ -32,30 +40,30 @@ def main() -> None:
           f"@ {fixture.venue}\n")
 
     # --- Step 2: the API-key guard. Importing the crew needs no key; RUNNING it does.
-    if not os.getenv("OPENAI_API_KEY"):
-        print("⚠️  OPENAI_API_KEY is not set, so the agents can't call an LLM.")
+    if not os.getenv("GEMINI_API_KEY"):
+        print("⚠️  GEMINI_API_KEY is not set, so the agents can't call an LLM.")
         print("    The structure is valid and imports fine — set the key to run live:")
-        print("    export OPENAI_API_KEY='sk-...'\n")
+        print("    export GEMINI_API_KEY='...'   (free key: aistudio.google.com)\n")
         sys.exit(0)
 
-    # --- Step 3: build and run the crew.   >>> TODO #6 (your turn)
+    # --- Step 3: build and run the crew. The inputs fill the {placeholders}
+    #     inside the task descriptions.
     crew = build_crew()
-    #
-    # >>> TODO #6: call crew.kickoff(...) and capture the result.
-    #     Pass the fixture fields as `inputs` so CrewAI can fill the {placeholders}
-    #     inside your task descriptions:
-    #
-    #     result = crew.kickoff(inputs={
-    #         "home_team": fixture.home_team,
-    #         "away_team": fixture.away_team,
-    #         "venue": fixture.venue,
-    #     })
-    #
-    # >>> TODO #7: print the final briefing. If you used output_pydantic in
-    #     briefing_task, try `result.pydantic` to get a typed BriefingOutput;
-    #     otherwise `result.raw` is the Markdown string. Inspect both to learn
-    #     the shape of CrewAI's CrewOutput object.
-    raise NotImplementedError("Complete TODO #6 and #7 to run the crew live.")
+    result = crew.kickoff(inputs={
+        "home_team": fixture.home_team,
+        "away_team": fixture.away_team,
+        "venue": fixture.venue,
+        })
+    assert isinstance(result, CrewOutput)
+
+    briefing = result.pydantic
+    assert isinstance(briefing, BriefingOutput)
+    print(briefing.markdown_briefing)
+    if briefing.escalated_alerts:
+        print("\n⚠️  ESCALATED ALERTS:")
+        for alert in briefing.escalated_alerts:
+            print(f"- {alert.severity.value.upper()}: {alert.message} "
+                  f"({alert.affected_player})")
 
 
 if __name__ == "__main__":
