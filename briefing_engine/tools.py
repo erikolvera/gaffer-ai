@@ -34,8 +34,24 @@ from .schemas import (
     MatchResult,
 )
 
-# Same env-configurable model as crew.py (free-tier quotas are per model).
-_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+def _gemini_model() -> str:
+    """Resolve the model at CALL time, not import time. GEMINI_MODEL_ACTIVE is
+    set by build_crew() when the API falls back to an alternate model, so the
+    tool's own LLM calls follow the crew onto the working model."""
+    return os.getenv("GEMINI_MODEL_ACTIVE") or os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+
+
+def _model_chain() -> list[str]:
+    """Models to try for grounded search, in order. Quotas — including the
+    SEPARATE grounding quota — are per model, so a 429 on one model says
+    nothing about the next. The 2.5 generation sits last as the workhorse
+    fallback: older, less congested, with its own grounding budget."""
+    fallbacks = [m.strip() for m in os.getenv(
+        "GEMINI_FALLBACK_MODELS",
+        "gemini-3-flash-preview,gemini-2.5-flash",
+    ).split(",") if m.strip()]
+    chain = [_gemini_model(), *fallbacks, "gemini-2.5-flash-lite"]
+    return list(dict.fromkeys(chain))  # dedupe, keep order
 
 # A real logger, not print(). In production you'd ship these to Datadog/CloudWatch.
 logger = logging.getLogger("briefing_engine.tools")
@@ -120,43 +136,55 @@ def _search_live_stats(team_name: str) -> dict:
 
     The caller still validates the result against TeamMatchData, same as the
     mock path — live data gets no special trust.
+
+    Tries each model in _model_chain(): the grounding quota is per model and
+    SEPARATE from the generation quota, so the crew's model being healthy
+    doesn't guarantee this call is.
     """
     client = genai.Client()  # reads GEMINI_API_KEY from the environment
 
-    logger.info("Grounded search for %s (live)", team_name)
-    research = client.models.generate_content(
-        model=_GEMINI_MODEL,
-        contents=(
-            f"Research the {team_name} national football team for the 2026 FIFA "
-            "World Cup, as of today. Find: their current typical formation; their "
-            "last 2-3 competitive match results (opponent, result, score, and "
-            "expected goals for/against if reported — estimate sensibly if not); "
-            "2-3 key players with position, recent goals, assists, and minutes "
-            "played; and any CURRENT injuries or suspensions affecting the squad."
-        ),
-        config=genai_types.GenerateContentConfig(
-            tools=[genai_types.Tool(google_search=genai_types.GoogleSearch())],
-        ),
-    )
+    last_err: Exception | None = None
+    for model in _model_chain():
+        try:
+            logger.info("Grounded search for %s (live, %s)", team_name, model)
+            research = client.models.generate_content(
+                model=model,
+                contents=(
+                    f"Research the {team_name} national football team for the 2026 FIFA "
+                    "World Cup, as of today. Find: their current typical formation; their "
+                    "last 2-3 competitive match results (opponent, result, score, and "
+                    "expected goals for/against if reported — estimate sensibly if not); "
+                    "2-3 key players with position, recent goals, assists, and minutes "
+                    "played; and any CURRENT injuries or suspensions affecting the squad."
+                ),
+                config=genai_types.GenerateContentConfig(
+                    tools=[genai_types.Tool(google_search=genai_types.GoogleSearch())],
+                ),
+            )
 
-    structured = client.models.generate_content(
-        model=_GEMINI_MODEL,
-        contents=(
-            "Convert these research notes into JSON for the team "
-            f"'{team_name}'. Use any positive integer for team_id. Formation "
-            "must look like '4-3-3'. For alerts, set affected_player to the "
-            "player's name and grade severity honestly: 'critical' ONLY for "
-            "players ruled out or in serious doubt for the tournament, "
-            "'warning' for knocks and minor doubts, 'info' for the rest. "
-            "Include at most the 4 most relevant alerts.\n\nNOTES:\n"
-            + (research.text or "")
-        ),
-        config=genai_types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=TeamMatchData,
-        ),
-    )
-    return json.loads(structured.text or "{}")
+            structured = client.models.generate_content(
+                model=model,
+                contents=(
+                    "Convert these research notes into JSON for the team "
+                    f"'{team_name}'. Use any positive integer for team_id. Formation "
+                    "must look like '4-3-3'. For alerts, set affected_player to the "
+                    "player's name and grade severity honestly: 'critical' ONLY for "
+                    "players ruled out or in serious doubt for the tournament, "
+                    "'warning' for knocks and minor doubts, 'info' for the rest. "
+                    "Include at most the 4 most relevant alerts.\n\nNOTES:\n"
+                    + (research.text or "")
+                ),
+                config=genai_types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=TeamMatchData,
+                ),
+            )
+            return json.loads(structured.text or "{}")
+        except Exception as e:
+            last_err = e
+            logger.warning("Grounded search on %s failed (%s); trying next model",
+                           model, str(e)[:120])
+    raise last_err if last_err else RuntimeError("empty model chain")
 
 
 # ---------------------------------------------------------------------------

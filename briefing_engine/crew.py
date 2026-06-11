@@ -36,7 +36,16 @@ from .schemas import BriefingOutput
 # API via CrewAI's native Gemini client (free tier; needs GEMINI_API_KEY).
 # Free-tier quotas are PER MODEL: 2.5-flash allows only 20 req/day, while the
 # 3.x generation is far roomier. Override with GEMINI_MODEL if needed.
-llm = LLM(model="gemini/" + os.getenv("GEMINI_MODEL", "gemini-3.5-flash"))
+DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+
+# Tried in order by the API when the default is congested (503) or out of
+# quota (429). Models fail independently — quotas and load are per model.
+FALLBACK_MODELS = [m.strip() for m in os.getenv(
+    "GEMINI_FALLBACK_MODELS",
+    "gemini-3-flash-preview,gemini-2.5-flash",
+).split(",") if m.strip()]
+
+llm = LLM(model=f"gemini/{DEFAULT_MODEL}")
 
 
 # ---------------------------------------------------------------------------
@@ -172,9 +181,13 @@ briefing_task = Task(
 # ---------------------------------------------------------------------------
 # THE CREW — assembling the pipeline.
 # ---------------------------------------------------------------------------
-def build_crew() -> Crew:
+def build_crew(model: str | None = None) -> Crew:
     """
     Returns the fully wired Crew.
+
+    `model` overrides the default for THIS run (used by the API's fallback
+    chain). It re-points every agent's LLM and sets GEMINI_MODEL_ACTIVE so
+    the Scout's tool calls inside tools.py follow the crew onto it.
 
     Process.sequential means: run scout_task, THEN analysis_task, THEN
     briefing_task — in that exact order. That ordering is YOUR orchestration
@@ -185,6 +198,12 @@ def build_crew() -> Crew:
         scout_task output  ->  analysis_task (via context)  ->
         briefing_task (via context)  ->  BriefingOutput.escalated_alerts
     """
+    active = model or DEFAULT_MODEL
+    os.environ["GEMINI_MODEL_ACTIVE"] = active
+    run_llm = LLM(model=f"gemini/{active}")
+    for agent in (lead_scout, tactical_analyst, sports_journalist):
+        agent.llm = run_llm
+
     return Crew(
         agents=[
             lead_scout,

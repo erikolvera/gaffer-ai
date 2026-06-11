@@ -31,7 +31,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from .crew import build_crew
+from .crew import DEFAULT_MODEL, FALLBACK_MODELS, build_crew
 from .schemas import BriefingOutput, FixtureRequest
 
 logger = logging.getLogger("briefing_engine.api")
@@ -73,6 +73,32 @@ class BriefingResponse(BaseModel):
     briefing: BriefingOutput
     cached: bool
     generated_at: str
+    model: str
+
+
+def _is_transient(err: Exception) -> bool:
+    """Congestion (503), quota (429), or an empty LLM response — all worth
+    retrying on a DIFFERENT model, since load and quotas are per model."""
+    s = str(err)
+    return any(marker in s for marker in
+               ("503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED", "empty"))
+
+
+def _kickoff_with_fallback(inputs: dict) -> tuple[object, str]:
+    """Try the default model, then each fallback. Returns (result, model)."""
+    chain = [DEFAULT_MODEL, *FALLBACK_MODELS]
+    last_err: Exception | None = None
+    for i, model in enumerate(chain):
+        try:
+            if i > 0:
+                logger.warning("Falling back to %s (attempt %d/%d)",
+                               model, i + 1, len(chain))
+            return build_crew(model).kickoff(inputs=inputs), model
+        except Exception as e:
+            last_err = e
+            if not _is_transient(e) or i == len(chain) - 1:
+                raise
+    raise last_err  # unreachable, keeps the type checker honest
 
 
 # ---------------------------------------------------------------------------
@@ -112,13 +138,13 @@ def create_briefing(req: BriefingRequest) -> BriefingResponse:
         logger.info("Generating briefing: %s vs %s", fixture.home_team,
                     fixture.away_team)
         try:
-            result = build_crew().kickoff(inputs={
+            result, model_used = _kickoff_with_fallback({
                 "home_team": fixture.home_team,
                 "away_team": fixture.away_team,
                 "venue": fixture.venue,
             })
         except Exception as e:
-            logger.error("Crew failed for %s: %s", key, e)
+            logger.error("Crew failed for %s on all models: %s", key, e)
             raise HTTPException(
                 status_code=503,
                 detail="The agents hit an upstream error (likely LLM quota or "
@@ -133,6 +159,7 @@ def create_briefing(req: BriefingRequest) -> BriefingResponse:
         payload = {
             "briefing": briefing.model_dump(),
             "generated_at": datetime.now(timezone.utc).isoformat(),
+            "model": model_used,
         }
         _cache[key] = payload
         return BriefingResponse(**payload, cached=False)
