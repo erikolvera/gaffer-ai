@@ -54,12 +54,25 @@ _cache: dict[str, dict] = {}
 _CACHE_TTL_SECONDS = 48 * 3600  # fixtures are dated; let old entries lapse
 
 _redis = None
-if os.getenv("REDIS_URL"):
+if os.getenv("REDIS_URL") and not os.getenv("CACHE_REDIS_URL"):
+    # Deliberately NOT honored: libraries in the agent stack auto-detect the
+    # well-known REDIS_URL name, build their own (mis-TLS-configured) clients,
+    # and crash mid-crew. Use CACHE_REDIS_URL for the briefing cache.
+    logger.warning("Ignoring REDIS_URL (third-party libs hijack that name); "
+                   "set CACHE_REDIS_URL instead")
+if os.getenv("CACHE_REDIS_URL"):
     try:
+        import certifi
         import redis as _redis_lib
 
-        _redis = _redis_lib.Redis.from_url(
-            os.environ["REDIS_URL"], socket_timeout=3, decode_responses=True)
+        _url = os.environ["CACHE_REDIS_URL"].strip()
+        _kwargs: dict = {"socket_timeout": 3, "decode_responses": True}
+        if _url.startswith("rediss://"):
+            # Pin the CA bundle explicitly: some Pythons (notably python.org
+            # macOS builds) can't see the system cert store, which fails TLS
+            # verification against Upstash with CERTIFICATE_VERIFY_FAILED.
+            _kwargs["ssl_ca_certs"] = certifi.where()
+        _redis = _redis_lib.Redis.from_url(_url, **_kwargs)
         _redis.ping()
         logger.info("Durable cache: Redis connected")
     except Exception as e:
@@ -67,7 +80,7 @@ if os.getenv("REDIS_URL"):
         logger.warning("Durable cache unavailable (%s); running memory-only", e)
         _redis = None
 else:
-    logger.info("REDIS_URL not set; cache is memory-only "
+    logger.info("CACHE_REDIS_URL not set; cache is memory-only "
                 "(won't survive process restarts)")
 
 
@@ -90,7 +103,7 @@ def _store_set(key: str, payload: dict) -> None:
     _cache[key] = payload
     if _redis is not None:
         try:
-            _redis.setex(key, _CACHE_TTL_SECONDS, json.dumps(payload))
+            _redis.set(key, json.dumps(payload), ex=_CACHE_TTL_SECONDS)
         except Exception as e:
             logger.warning("Redis write failed (%s); entry is memory-only", e)
 

@@ -98,9 +98,11 @@ data (the original learning scaffold this project grew from).
 ## Deploy
 
 **Render (free):** push to GitHub → Render → *New + → Blueprint* → pick this
-repo → set `GEMINI_API_KEY` and `REDIS_URL` (free Redis from
+repo → set `GEMINI_API_KEY` and `CACHE_REDIS_URL` (free Redis from
 [upstash.com](https://upstash.com)) in the dashboard. `render.yaml` does the
-rest. Without `REDIS_URL` the app still runs — the cache is just memory-only.
+rest. Without `CACHE_REDIS_URL` the app still runs — the cache is just
+memory-only. (The name is deliberately not `REDIS_URL`: libraries in the
+agent stack auto-detect that name and break.)
 A `Dockerfile` is included for Railway / Fly.io / Cloud Run.
 
 **Daily warm-up:** `.github/workflows/warm-cache.yml` pre-generates briefings
