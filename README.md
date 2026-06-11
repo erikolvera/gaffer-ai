@@ -47,18 +47,24 @@ decaying into vibes.
 ## The stack
 
 - **CrewAI** — agent orchestration (sequential process, context passing)
-- **Gemini 3.5 Flash** (free tier) — agent reasoning + grounded Google Search
-  for live team news
+- **Gemini** — agent reasoning + grounded Google Search for live team news;
+  3.5 Flash by default with **fallback chains** to older models when quotas
+  or congestion bite
 - **Pydantic v2** — data contracts at every boundary
 - **FastAPI + vanilla JS** — one endpoint, one page; the UI animates the agent
   relay while the crew works
+- **Redis (Upstash) · Render · GitHub Actions** — durable cache, hosting, and
+  the scheduled morning warm-up (details below)
 
 ## Engineering notes (the parts that fought back)
 
 - **Free-tier quotas are per model, and the docs lie.** Research said 250
-  requests/day for `gemini-2.5-flash`; the API's 429 said `limit: 20`. The fix:
-  model selection is env-configurable (`GEMINI_MODEL`), defaulting to the 3.x
-  generation with its own, roomier bucket.
+  requests/day for `gemini-2.5-flash`; the API's 429 said `limit: 20`. The fix
+  grew in layers, each from a real outage: **fallback chains** at the crew
+  level (`GEMINI_MODEL` + `GEMINI_FALLBACK_MODELS`) *and* inside the grounded
+  search tool (grounding has its own per-model quota), plus a **double sweep
+  with a 60s backoff** — during peak load every model can briefly 503 in the
+  same window, and a single chain walk is faster than the spike it's dodging.
 - **Cheaper models fail quietly.** On `flash-lite`, the crew ran fine — and
   silently dropped the critical alert from the structured output. The
   alert-journey test caught it. Model choice is a correctness decision, not
@@ -74,6 +80,11 @@ decaying into vibes.
   hosting sleeps between visitors and would otherwise wipe it. A GitHub
   Action pre-generates the day's real fixtures every morning right after
   the quota reset, so visitors almost always hit cache instantly.
+- **Loose version ranges broke deploys at 3 AM.** Two builds died with pip's
+  `ResolutionImpossible` re-resolving the `crewai → chromadb → onnxruntime`
+  graph fresh. `requirements.lock` (a full freeze, 138 pins) made builds
+  deterministic; `requirements.txt` stays as the human-readable direct-deps
+  list with regeneration instructions.
 
 ## Run it locally
 
@@ -82,7 +93,9 @@ git clone https://github.com/erikolvera/gaffer-ai.git && cd gaffer-ai
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# Free key from https://aistudio.google.com — no card needed
+# Key from https://aistudio.google.com — the free tier works but its daily
+# per-model limits are tight; a few dollars of prepay credits removes them
+# (the live demo runs on ~$5 of credits)
 echo "GEMINI_API_KEY=your-key" > .env
 
 # CLI:
@@ -102,7 +115,8 @@ repo → set `GEMINI_API_KEY` and `CACHE_REDIS_URL` (free Redis from
 [upstash.com](https://upstash.com)) in the dashboard. `render.yaml` does the
 rest. Without `CACHE_REDIS_URL` the app still runs — the cache is just
 memory-only. (The name is deliberately not `REDIS_URL`: libraries in the
-agent stack auto-detect that name and break.)
+agent stack auto-detect that name and break.) Builds install
+`requirements.lock` for deterministic deploys.
 A `Dockerfile` is included for Railway / Fly.io / Cloud Run.
 
 **Daily warm-up:** `.github/workflows/warm-cache.yml` pre-generates briefings
@@ -117,8 +131,12 @@ briefing_engine/
 ├── tools.py     Scout's hands: grounded live search + mock fallback ladder
 ├── crew.py      the three agents, their tasks, and the relay wiring
 ├── main.py      CLI entry point
-├── api.py       FastAPI: /api/briefing with cache + generation lock
+├── api.py       FastAPI: /api/briefing with two-tier cache + fallback sweeps
 └── static/      the fan-facing search page
+fixtures/schedule.json          real match schedule the warm-up reads
+.github/workflows/warm-cache.yml  the 1:30am pre-generation robot
+render.yaml · Dockerfile        deploy blueprints (Render / anywhere)
+requirements.lock               full 138-pin freeze — deterministic builds
 ```
 
 ## Roadmap
