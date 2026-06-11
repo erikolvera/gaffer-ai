@@ -8,3 +8,4 @@ pydantic>=2.0         # Data contracts (CrewAI depends on this too; pinned for c
 python-dotenv>=1.0    # Loads GEMINI_API_KEY from .env
 fastapi>=0.110        # The web layer (briefing_engine/api.py)
 uvicorn[standard]>=0.29  # ASGI server:  uvicorn briefing_engine.api:app
+redis>=5.0            # Durable cache tier (free Upstash; optional via REDIS_URL)

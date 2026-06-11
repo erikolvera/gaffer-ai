@@ -18,10 +18,13 @@ WHY THE CACHE IS THE WHOLE GAME HERE:
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import threading
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
@@ -43,9 +46,54 @@ _STATIC_DIR = Path(__file__).parent / "static"
 # ---------------------------------------------------------------------------
 # Cache + concurrency guard.
 # ---------------------------------------------------------------------------
-# {cache_key: API payload dict}. In-memory is fine for a single-process demo;
-# swap for Redis/SQLite if this ever runs on more than one worker.
+# Two tiers. The dict is the fast tier; Redis (REDIS_URL, e.g. a free Upstash
+# instance) is the durable tier. Render's free tier spins the process down
+# after ~15 idle minutes — without Redis, every wake-up starts with an empty
+# cache and repeat visitors re-spend ~15-20 LLM calls per fixture.
 _cache: dict[str, dict] = {}
+_CACHE_TTL_SECONDS = 48 * 3600  # fixtures are dated; let old entries lapse
+
+_redis = None
+if os.getenv("REDIS_URL"):
+    try:
+        import redis as _redis_lib
+
+        _redis = _redis_lib.Redis.from_url(
+            os.environ["REDIS_URL"], socket_timeout=3, decode_responses=True)
+        _redis.ping()
+        logger.info("Durable cache: Redis connected")
+    except Exception as e:
+        # Never let the cache backend take the demo down — degrade to memory.
+        logger.warning("Durable cache unavailable (%s); running memory-only", e)
+        _redis = None
+else:
+    logger.info("REDIS_URL not set; cache is memory-only "
+                "(won't survive process restarts)")
+
+
+def _store_get(key: str) -> dict | None:
+    if key in _cache:
+        return _cache[key]
+    if _redis is not None:
+        try:
+            raw = _redis.get(key)
+            if raw:
+                payload = json.loads(raw)
+                _cache[key] = payload  # re-warm the fast tier
+                return payload
+        except Exception as e:
+            logger.warning("Redis read failed (%s); falling back to memory", e)
+    return None
+
+
+def _store_set(key: str, payload: dict) -> None:
+    _cache[key] = payload
+    if _redis is not None:
+        try:
+            _redis.setex(key, _CACHE_TTL_SECONDS, json.dumps(payload))
+        except Exception as e:
+            logger.warning("Redis write failed (%s); entry is memory-only", e)
+
 
 # One crew at a time. kickoff() is slow and quota-hungry; serializing requests
 # protects the free tier from a burst of visitors generating simultaneously.
@@ -54,10 +102,15 @@ _generation_lock = threading.Lock()
 
 def _cache_key(fixture: FixtureRequest) -> str:
     """One briefing per fixture per day. Order-insensitive: USA vs Germany
-    and Germany vs USA share an entry."""
+    and Germany vs USA share an entry.
+
+    The "day" is Pacific time on purpose: Gemini's free-tier quotas reset at
+    midnight PT, and host-country match evenings cross the UTC date line —
+    a UTC key would expire the cache at 5pm PT, right at peak traffic."""
     teams = sorted([fixture.home_team.strip().lower(),
                     fixture.away_team.strip().lower()])
-    return f"{teams[0]}|{teams[1]}|{date.today().isoformat()}"
+    day = datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat()
+    return f"{teams[0]}|{teams[1]}|{day}"
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +164,8 @@ def index() -> FileResponse:
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"status": "ok", "cached_briefings": len(_cache)}
+    return {"status": "ok", "cached_briefings": len(_cache),
+            "durable_cache": _redis is not None}
 
 
 @app.post("/api/briefing", response_model=BriefingResponse)
@@ -124,16 +178,16 @@ def create_briefing(req: BriefingRequest) -> BriefingResponse:
         raise HTTPException(status_code=422, detail="Pick two different teams.")
 
     key = _cache_key(fixture)
-    if key in _cache:
+    if (hit := _store_get(key)) is not None:
         logger.info("Cache hit: %s", key)
-        return BriefingResponse(**_cache[key], cached=True)
+        return BriefingResponse(**hit, cached=True)
 
     # Serialize generation. The double-check inside the lock matters: two
     # visitors can race to the lock for the same fixture; the loser must find
     # the winner's cached result instead of regenerating it.
     with _generation_lock:
-        if key in _cache:
-            return BriefingResponse(**_cache[key], cached=True)
+        if (hit := _store_get(key)) is not None:
+            return BriefingResponse(**hit, cached=True)
 
         logger.info("Generating briefing: %s vs %s", fixture.home_team,
                     fixture.away_team)
@@ -161,5 +215,5 @@ def create_briefing(req: BriefingRequest) -> BriefingResponse:
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "model": model_used,
         }
-        _cache[key] = payload
+        _store_set(key, payload)
         return BriefingResponse(**payload, cached=False)

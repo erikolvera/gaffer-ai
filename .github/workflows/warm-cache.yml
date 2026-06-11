@@ -1,0 +1,47 @@
+# Pre-generates briefings for today's real fixtures every morning, right
+# after the Gemini free-tier quota reset (midnight Pacific = 07:00/08:00 UTC).
+# The first visitor of the day should never pay the generation cost — a robot
+# pays it while quotas are full, and everyone hits the durable cache all day.
+name: Warm today's fixture cache
+
+on:
+  schedule:
+    - cron: "30 8 * * *"   # 08:30 UTC = 00:30/01:30 PT, quotas freshly reset
+  workflow_dispatch: {}     # manual runs from the Actions tab
+
+jobs:
+  warm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate briefings for today's fixtures
+        env:
+          API_URL: https://golazo-fwpu.onrender.com
+        run: |
+          # "Today" in Pacific time, matching the API's cache-key day and the
+          # quota-reset day.
+          TODAY=$(TZ=America/Los_Angeles date +%F)
+          FIXTURES=$(jq -c --arg d "$TODAY" '.[$d] // []' fixtures/schedule.json)
+          COUNT=$(echo "$FIXTURES" | jq 'length')
+          echo "Fixtures for $TODAY: $COUNT"
+          if [ "$COUNT" -eq 0 ]; then
+            echo "No fixtures in fixtures/schedule.json for $TODAY — nothing to warm."
+            exit 0
+          fi
+
+          echo "$FIXTURES" | jq -c '.[]' | while read -r fx; do
+            home=$(echo "$fx" | jq -r .home)
+            away=$(echo "$fx" | jq -r .away)
+            venue=$(echo "$fx" | jq -r .venue)
+            echo "=== Warming: $home vs $away @ $venue"
+            # Generous timeout: Render cold start (~1 min) + generation with
+            # model fallbacks (~3 min). One fixture failing must not stop the
+            # rest, hence the || — quota/congestion errors are expected events.
+            body=$(jq -cn --arg h "$home" --arg a "$away" --arg v "$venue" \
+                   '{home_team:$h, away_team:$a, venue:$v}')
+            curl -s --max-time 420 -X POST "$API_URL/api/briefing" \
+                 -H "Content-Type: application/json" -d "$body" \
+              | jq '{fixture: .briefing.fixture, cached, model}' \
+              || echo "!!! $home vs $away failed — continuing"
+          done

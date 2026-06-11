@@ -68,9 +68,12 @@ decaying into vibes.
   against the schema. Both paths (live and mock fallback) pass identical
   validation — web data earns no extra trust.
 - **One briefing ≈ 15–20 LLM calls**, so the API caches per fixture per day
-  (order-insensitive) and serializes generation behind a lock with a
-  double-check. The first visitor pays ~45s; everyone else gets today's
-  edition instantly, at zero quota.
+  (order-insensitive, keyed to the Pacific quota-reset day) and serializes
+  generation behind a lock with a double-check. The cache is two-tier:
+  in-memory for speed, Redis (free Upstash) for durability — free-tier
+  hosting sleeps between visitors and would otherwise wipe it. A GitHub
+  Action pre-generates the day's real fixtures every morning right after
+  the quota reset, so visitors almost always hit cache instantly.
 
 ## Run it locally
 
@@ -95,8 +98,14 @@ data (the original learning scaffold this project grew from).
 ## Deploy
 
 **Render (free):** push to GitHub → Render → *New + → Blueprint* → pick this
-repo → set `GEMINI_API_KEY` in the dashboard. `render.yaml` does the rest.
+repo → set `GEMINI_API_KEY` and `REDIS_URL` (free Redis from
+[upstash.com](https://upstash.com)) in the dashboard. `render.yaml` does the
+rest. Without `REDIS_URL` the app still runs — the cache is just memory-only.
 A `Dockerfile` is included for Railway / Fly.io / Cloud Run.
+
+**Daily warm-up:** `.github/workflows/warm-cache.yml` pre-generates briefings
+for the fixtures listed in `fixtures/schedule.json` each morning. Extend the
+schedule file as the tournament progresses.
 
 ## Project structure
 
@@ -113,8 +122,8 @@ briefing_engine/
 ## Roadmap
 
 - Stream real agent progress to the relay UI (it currently paces on typical timings)
-- Persistent cache (SQLite) so briefings survive restarts
-- Fixture calendar integration — one click on today's real matches
+- Fixture calendar in the UI — one click on today's real matches (the data
+  already lives in fixtures/schedule.json)
 
 ---
 

@@ -1,0 +1,22 @@
+{
+  "2026-06-11": [
+    {"home": "Mexico", "away": "South Africa", "venue": "Estadio Azteca, Mexico City"},
+    {"home": "South Korea", "away": "Czechia", "venue": "Estadio Akron, Zapopan"}
+  ],
+  "2026-06-12": [
+    {"home": "Canada", "away": "Bosnia and Herzegovina", "venue": "BMO Field, Toronto"},
+    {"home": "United States", "away": "Paraguay", "venue": "SoFi Stadium, Inglewood"}
+  ],
+  "2026-06-13": [
+    {"home": "Qatar", "away": "Switzerland", "venue": "Levi's Stadium, Santa Clara"},
+    {"home": "Brazil", "away": "Morocco", "venue": "MetLife Stadium, East Rutherford"},
+    {"home": "Haiti", "away": "Scotland", "venue": "Gillette Stadium, Foxborough"},
+    {"home": "Australia", "away": "Turkiye", "venue": "BC Place, Vancouver"}
+  ],
+  "2026-06-14": [
+    {"home": "Germany", "away": "Curacao", "venue": "NRG Stadium, Houston"},
+    {"home": "Netherlands", "away": "Japan", "venue": "AT&T Stadium, Arlington"},
+    {"home": "Ivory Coast", "away": "Ecuador", "venue": "Lincoln Financial Field, Philadelphia"},
+    {"home": "Sweden", "away": "Tunisia", "venue": "Estadio BBVA, Monterrey"}
+  ]
+}
