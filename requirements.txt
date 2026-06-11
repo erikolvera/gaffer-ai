@@ -1,9 +1,11 @@
 # Install with:  pip install -r requirements.txt
 #
-# Versions are PINNED to a verified-compatible set (pip check: clean).
-# Loose ranges caused a ResolutionImpossible build failure on Render when a
-# fresh dependency release changed the resolution — pin first, upgrade
-# deliberately.
+# This file lists DIRECT dependencies (pinned, verified compatible).
+# Deployment installs requirements.lock instead — a full pip freeze of a
+# working environment — because re-resolving the crewai/chromadb graph
+# fresh caused ResolutionImpossible build failures. To upgrade: bump here,
+# install locally, verify, then regenerate the lock:
+#   pip freeze | grep -vi fakeredis > requirements.lock
 
 crewai[google-genai]==1.14.6   # Agents, Tasks, Crews, BaseTool + native Gemini client
 pydantic==2.12.5               # Data contracts
