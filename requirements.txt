@@ -1,11 +1,13 @@
 # Install with:  pip install -r requirements.txt
 #
-# NOTE: You can IMPORT and validate this project with just these packages.
-# You only need an LLM API key (GEMINI_API_KEY) to actually RUN the agents.
+# Versions are PINNED to a verified-compatible set (pip check: clean).
+# Loose ranges caused a ResolutionImpossible build failure on Render when a
+# fresh dependency release changed the resolution — pin first, upgrade
+# deliberately.
 
-crewai[google-genai]>=0.80   # Agents, Tasks, Crews, BaseTool + native Gemini client
-pydantic>=2.0         # Data contracts (CrewAI depends on this too; pinned for clarity)
-python-dotenv>=1.0    # Loads GEMINI_API_KEY from .env
-fastapi>=0.110        # The web layer (briefing_engine/api.py)
-uvicorn[standard]>=0.29  # ASGI server:  uvicorn briefing_engine.api:app
-redis>=5.0            # Durable cache tier (free Upstash; optional via REDIS_URL)
+crewai[google-genai]==1.14.6   # Agents, Tasks, Crews, BaseTool + native Gemini client
+pydantic==2.12.5               # Data contracts
+python-dotenv==1.2.2           # Loads GEMINI_API_KEY / CACHE_REDIS_URL from .env
+fastapi==0.136.3               # The web layer (briefing_engine/api.py)
+uvicorn[standard]==0.49.0      # ASGI server:  uvicorn briefing_engine.api:app
+redis==8.0.0                   # Durable cache tier (free Upstash; optional via CACHE_REDIS_URL)
