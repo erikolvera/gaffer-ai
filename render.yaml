@@ -3,7 +3,7 @@
 # afterwards waits through a cold start (~1 min). Fine for a portfolio demo.
 services:
   - type: web
-    name: gaffer-ai
+    name: golazo
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt

@@ -36,7 +36,7 @@ from .schemas import BriefingOutput, FixtureRequest
 
 logger = logging.getLogger("briefing_engine.api")
 
-app = FastAPI(title="World Cup 2026 Briefing Engine")
+app = FastAPI(title="GOLAZO — World Cup 2026 Briefing API")
 
 _STATIC_DIR = Path(__file__).parent / "static"
 

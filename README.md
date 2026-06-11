@@ -1,8 +1,9 @@
-# ⚽ Gaffer AI — The World Cup 2026 Briefing Engine
+# ⚽ GOLAZO — the World Cup 2026 briefing engine
 
 Type any two national teams. Three AI agents scout the live web, break the
 matchup down, and write you a fan-first matchday briefing — with real injury
 news from this week, validated end-to-end by typed data contracts.
+(Repo keeps its original `gaffer-ai` slug; the product is GOLAZO.)
 
 > **Live demo:** _coming soon — deploys via [render.yaml](render.yaml)_
 > **Example:** "Mexico vs South Africa" → a preview leading with Mexico's actual
