@@ -17,6 +17,7 @@ to conform to a typed schema. This is the heart of software-first AI engineering
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from enum import Enum
 from typing import Optional
@@ -120,6 +121,20 @@ class BriefingOutput(BaseModel):
         default_factory=list,
         description="Critical alerts carried all the way through the crew.",
     )
+
+    @field_validator("markdown_briefing")
+    @classmethod
+    def headings_must_start_lines(cls, v: str) -> str:
+        # LLMs in JSON mode sometimes emit the whole document on ONE line.
+        # Markdown only treats '#'/'##' as headings at line start — mid-line
+        # they render as literal hash marks (and the first '# ' swallows the
+        # entire text into a single giant <h1>). Re-break the lines here so
+        # every consumer (API, CLI, cache) gets renderable Markdown.
+        v = re.sub(r"(?<=[^\n])\s+(#{1,4} )", r"\n\n\1", v)
+        # Second pass: split '## Section: body...' so the body isn't rendered
+        # as part of the heading. The {1,40} bound keeps this from firing on
+        # ordinary sentences that merely contain a colon.
+        return re.sub(r"^(#{1,4} [^:\n]{1,40}):[ \t]+", r"\1\n\n", v, flags=re.M)
 
 
 __all__ = [

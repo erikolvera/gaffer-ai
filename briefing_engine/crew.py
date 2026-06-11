@@ -167,7 +167,9 @@ briefing_task = Task(
     """),
     expected_output=("""
     A Markdown preview with sections: Fixture, Form, Key Matchups,
-    ALERTS, What to Watch For. Alongside it: the fixture name (e.g.
+    ALERTS, What to Watch For. Use REAL line breaks: every ## heading on
+    its own line with a blank line before it (never headings mid-line).
+    Alongside it: the fixture name (e.g.
     'USA vs Germany') and an escalated_alerts list containing every
     'critical' alert from the analysis with its severity, message,
     and affected_player — or an empty list if there are none.
