@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -151,20 +152,28 @@ def _is_transient(err: Exception) -> bool:
 
 
 def _kickoff_with_fallback(inputs: dict) -> tuple[object, str]:
-    """Try the default model, then each fallback. Returns (result, model)."""
+    """Try the default model, then each fallback — twice, with a backoff
+    between passes. A chain walk takes seconds; congestion spikes (503s)
+    last minutes, so during peak load every model can briefly 503 within
+    the same window. Returns (result, model)."""
     chain = [DEFAULT_MODEL, *FALLBACK_MODELS]
     last_err: Exception | None = None
-    for i, model in enumerate(chain):
-        try:
-            if i > 0:
-                logger.warning("Falling back to %s (attempt %d/%d)",
-                               model, i + 1, len(chain))
-            return build_crew(model).kickoff(inputs=inputs), model
-        except Exception as e:
-            last_err = e
-            if not _is_transient(e) or i == len(chain) - 1:
-                raise
-    raise last_err  # unreachable, keeps the type checker honest
+    for sweep in range(2):
+        for i, model in enumerate(chain):
+            try:
+                if sweep or i:
+                    logger.warning("Trying %s (sweep %d, model %d/%d)",
+                                   model, sweep + 1, i + 1, len(chain))
+                return build_crew(model).kickoff(inputs=inputs), model
+            except Exception as e:
+                last_err = e
+                if not _is_transient(e):
+                    raise
+        if sweep == 0:
+            logger.warning("Whole chain transiently failing; backing off 60s")
+            time.sleep(60)
+    assert last_err is not None
+    raise last_err
 
 
 # ---------------------------------------------------------------------------
