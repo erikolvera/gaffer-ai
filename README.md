@@ -5,9 +5,11 @@ matchup down, and write you a fan-first matchday briefing — with real injury
 news from this week, validated end-to-end by typed data contracts.
 (Repo keeps its original `gaffer-ai` slug; the product is GOLAZO.)
 
-> **Live demo:** _coming soon — deploys via [render.yaml](render.yaml)_
+> **Live demo:** **[golazo-fwpu.onrender.com](https://golazo-fwpu.onrender.com/)**
+> (free hosting — first visit after an idle spell takes ~1 min to wake, then a
+> fresh briefing takes a minute or two; cached fixtures are instant)
 > **Example:** "Mexico vs South Africa" → a preview leading with Mexico's actual
-> June 2026 injury crisis, generated in ~45 seconds.
+> June 2026 injury crisis.
 
 ---
 
