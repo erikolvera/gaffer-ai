@@ -1,7 +1,7 @@
 """
 schemas.py — The data contracts for the Tactical Briefing Engine.
 
-WHY THIS FILE EXISTS (read me):
+WHY THIS FILE EXISTS:
     In an agentic system, data flows LLM -> tool -> LLM -> tool... Each hop is a
     chance for the data to drift into garbage (an LLM might invent a formation,
     a flaky API might return null). Pydantic models are our "border control":

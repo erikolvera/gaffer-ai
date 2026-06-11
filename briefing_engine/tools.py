@@ -8,9 +8,11 @@ WHY THIS FILE EXISTS:
 
     So a "tool" is just: a validated function + a description the LLM can read.
 
-LEARNING GOAL FOR YOU:
-    The mock + error handling are done so you can study the pattern.
-    The TODOs (marked >>>) are where YOU practice. Fill them in.
+DATA SOURCES:
+    Live mode (default) researches any team via Gemini grounded search;
+    _FAKE_DB is the offline/dev fallback (BRIEFING_DATA_MODE=mock) and the
+    fixture data for tests — its Germany entry carries the critical alert
+    used to verify the alert relay end-to-end.
 """
 
 from __future__ import annotations
@@ -61,7 +63,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message
 # ---------------------------------------------------------------------------
 # The mocked "api-football-v1" backend.
 # In reality this would be: requests.get(f"{BASE}/teams", params=..., headers=...)
-# We return canned JSON so you can build the whole system with zero API keys.
+# Canned JSON keeps dev and tests runnable with zero API keys or quota.
 # ---------------------------------------------------------------------------
 _FAKE_DB: dict[str, dict] = {
     "USA": {
@@ -82,11 +84,9 @@ _FAKE_DB: dict[str, dict] = {
         ],
         "alerts": [],
     },
-    # >>> TODO #1: Add a "Germany" entry to _FAKE_DB.
-    #     Give it a different formation (try "4-2-3-1"), two recent_form entries,
-    #     two key_players, and — importantly — ONE alert with severity "critical"
-    #     (e.g. a suspended center-back). This is how you'll test that critical
-    #     alerts survive the journey through all three agents.
+    # Germany carries the one CRITICAL alert on purpose: USA vs Germany in
+    # mock mode is the end-to-end test that an alert survives the journey
+    # through all three agents into BriefingOutput.escalated_alerts.
     "Germany": {
         "team_id" : 2,
         "team_name" : "Germany",

@@ -1,13 +1,13 @@
 """
 crew.py — The orchestrator. Where three agents become a pipeline.
 
-THE BIG IDEA (read me):
-    A "Crew" is just a controlled sequence of (Agent + Task) steps that YOU wire
-    together in code. The LLM is smart *inside* each step; you are in charge of
-    the *order* and *what flows between steps*. That control flow is the whole
-    job of an AI engineer — the model is a component, not the architect.
+THE BIG IDEA:
+    A "Crew" is a controlled sequence of (Agent + Task) steps wired together
+    in code. The LLM is smart *inside* each step; the code decides the *order*
+    and *what flows between steps* — the model is a component, not the
+    architect.
 
-    The triangle you must understand:
+    The three building blocks:
 
         AGENT  = who is acting   (role/goal/backstory = its system prompt)
         TASK   = what to do      (description + expected_output)
@@ -49,7 +49,7 @@ llm = LLM(model=f"gemini/{DEFAULT_MODEL}")
 
 
 # ---------------------------------------------------------------------------
-# AGENT 1 — THE LEAD SCOUT  (fully written: study this, then mirror it)
+# AGENT 1 — THE LEAD SCOUT
 # ---------------------------------------------------------------------------
 # role/goal/backstory are NOT comments — they are the prompt the LLM reads to
 # decide how to behave. Write them like a job description for a real scout.
@@ -192,11 +192,10 @@ def build_crew(model: str | None = None) -> Crew:
     the Scout's tool calls inside tools.py follow the crew onto it.
 
     Process.sequential means: run scout_task, THEN analysis_task, THEN
-    briefing_task — in that exact order. That ordering is YOUR orchestration
-    decision, expressed in code. (The other mode, hierarchical, adds a manager
-    agent that decides order dynamically — ignore it until you're comfortable.)
+    briefing_task — in that exact order. The ordering is an orchestration
+    decision expressed in code, not left to the model.
 
-    The "critical alert" journey you must preserve:
+    The "critical alert" journey this pipeline must preserve:
         scout_task output  ->  analysis_task (via context)  ->
         briefing_task (via context)  ->  BriefingOutput.escalated_alerts
     """
