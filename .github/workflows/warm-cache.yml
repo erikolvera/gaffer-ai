@@ -35,12 +35,14 @@ jobs:
             away=$(echo "$fx" | jq -r .away)
             venue=$(echo "$fx" | jq -r .venue)
             echo "=== Warming: $home vs $away @ $venue"
-            # Generous timeout: Render cold start (~1 min) + generation with
-            # model fallbacks (~3 min). One fixture failing must not stop the
-            # rest, hence the || — quota/congestion errors are expected events.
+            # Generous timeout: cold start (~1 min) + generation, which takes
+            # 10-15 min on the free instance's 0.1 vCPU (measured in prod).
+            # One fixture failing must not stop the rest, hence the || —
+            # quota/congestion errors are expected events. Note: even if curl
+            # times out, the server finishes generating and caches anyway.
             body=$(jq -cn --arg h "$home" --arg a "$away" --arg v "$venue" \
                    '{home_team:$h, away_team:$a, venue:$v}')
-            curl -s --max-time 420 -X POST "$API_URL/api/briefing" \
+            curl -s --max-time 1200 -X POST "$API_URL/api/briefing" \
                  -H "Content-Type: application/json" -d "$body" \
               | jq '{fixture: .briefing.fixture, cached, model}' \
               || echo "!!! $home vs $away failed — continuing"
